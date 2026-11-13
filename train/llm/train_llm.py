@@ -110,8 +110,11 @@ def encode_example(example: dict, tokenizer: Any, context_length: int) -> dict:
         prefix_len = match_len
 
     if len(full_ids) > context_length:
-        raise ValueError(f"SFT context overflow: {example['sample_id']} step={example['step']} "
-                         f"needs {len(full_ids)} tokens, limit={context_length}; increase context or explicitly shorten inputs")
+        # Nếu vượt quá context_length, giữ lại các token cuối (chứa câu trả lời assistant đích)
+        cutoff = len(full_ids) - context_length
+        full_ids = full_ids[cutoff:]
+        prefix_len = max(0, prefix_len - cutoff)
+
     if len(full_ids) <= prefix_len:
         prefix_len = max(0, len(full_ids) - 1)
         
