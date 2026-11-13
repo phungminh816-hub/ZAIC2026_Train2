@@ -57,7 +57,7 @@ llm:
   lora_alpha: 32
   lora_dropout: 0.05
   target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
-  context_length: 12288           # Tokenizer thật: mẫu dài nhất 9681 token, chưa tính sai khác ASR.
+  context_length: 8192            # Giảm từ 12288 xuống 8192 để tránh OOM logits trên card 24GB
   max_new_tokens: 512
   attention_implementation: sdpa
   gradient_checkpointing: true

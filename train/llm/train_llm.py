@@ -272,7 +272,7 @@ def run(cfg: dict) -> None:
         "report_to": ["tensorboard"],
         "dataloader_num_workers": 0,
         "remove_unused_columns": False,
-        "optim": "adamw_torch",
+        "optim": "paged_adamw_8bit",
         "seed": cfg["project"]["seed"],
         "data_seed": cfg["project"]["seed"],
         "label_names": ["labels"],
