@@ -58,7 +58,7 @@ def run(cfg: dict) -> None:
     import lightning.pytorch as pl
     from lightning.pytorch.callbacks import ModelCheckpoint
     from lightning.pytorch.loggers import TensorBoardLogger
-    from omegaconf import OmegaConf
+    from omegaconf import OmegaConf, open_dict
     from train.run_train import precision_name
 
     options = cfg["asr"]
