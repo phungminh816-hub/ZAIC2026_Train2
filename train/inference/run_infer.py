@@ -89,7 +89,12 @@ class LifeMateAgent:
             ).to(self.llm_model.device)
             available = context_length - inputs["input_ids"].shape[1]
             if available < 1:
-                raise ValueError(f"Inference context overflow: {sample['id']}")
+                # Nếu context quá dài (vượt trần), cắt ngắn từ phía đầu của input_ids
+                cutoff = inputs["input_ids"].shape[1] - (context_length - max_tokens)
+                if cutoff > 0:
+                    inputs["input_ids"] = inputs["input_ids"][:, cutoff:]
+                    inputs["attention_mask"] = inputs["attention_mask"][:, cutoff:]
+                available = max_tokens
             with torch.inference_mode():
                 generated = self.llm_model.generate(
                     **inputs, max_new_tokens=min(max_tokens, available), do_sample=False,
@@ -152,10 +157,14 @@ def run(cfg: dict) -> None:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent,
                                          prefix=".submission-", suffix=".tmp", delete=False) as output:
             temporary = Path(output.name)
-            for sample in samples:
+            for idx, sample in enumerate(samples, 1):
                 result = agent.predict_sample(sample, ToolRuntime(split_dir, sample["id"], root))
                 output.write(json.dumps(result, ensure_ascii=False) + "\n")
+                output.flush()
                 stats.append(agent.last_stats)
+                if idx % 20 == 0 or idx == len(samples):
+                    avg_time = sum(s["elapsed_seconds"] for s in stats) / len(stats)
+                    print(f"[{idx}/{len(samples)}] avg {avg_time:.1f}s/sample")
         temporary.replace(destination)
         destination.with_suffix(".latency.json").write_text(json.dumps(stats, indent=2), encoding="utf-8")
     finally:
