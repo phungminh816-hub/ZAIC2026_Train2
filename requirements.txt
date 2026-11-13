@@ -1,0 +1,19 @@
+# Linux x86_64 / Python 3.11. Cài torch + torchaudio CUDA theo README trước.
+torch==2.7.1
+torchaudio==2.7.1
+numpy==1.26.4
+pyyaml==6.0.2
+soundfile==0.13.1
+
+# NeMo 2.6 yêu cầu transformers ~=4.53.0 và lightning <=2.4.0.
+nemo_toolkit[asr]==2.6.0
+lightning==2.4.0
+transformers==4.53.3
+peft==0.16.0
+accelerate==1.8.1
+bitsandbytes==0.46.1
+datasets==3.6.0
+jiwer==3.1.0
+tensorboard==2.19.0
+pytest==8.4.1
+

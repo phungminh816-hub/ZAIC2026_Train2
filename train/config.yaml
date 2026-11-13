@@ -1,0 +1,81 @@
+# Mặc định: Vast.ai, Linux x86_64, Python 3.11, một GPU NVIDIA 24 GB.
+project:
+  name: LifeMate_Train2
+  seed: 42
+  total_parameter_limit: 6000000000
+  precision: auto                 # bf16 nếu GPU hỗ trợ, ngược lại fp16.
+
+runtime:
+  minimum_vram_gb: 20             # Ngưỡng kiểm tra cho profile 24 GB, không phải cam kết hết OOM.
+  minimum_driver_major: 580       # NeMo 2.6 kéo numba-cuda[cu13]; cần driver hỗ trợ CUDA 13.
+  num_workers: 2
+
+paths:
+  root: ".."                     # Tương đối với thư mục chứa file config.
+  raw_zip: data/raw/train+public_test.zip
+  processed_dir: data/processed
+  checkpoint_dir: checkpoints
+  output_dir: outputs
+
+data:
+  val_ratio: 0.1
+  sample_rate: 16000
+  check_sha256: true
+  force_extract: false
+
+# Parakeet là model NeMo CTC; không dùng loader/LoRA dành cho Whisper.
+asr:
+  backbone: nvidia/parakeet-ctc-0.6b-Vietnamese
+  revision: b0493142b49458810324e3db8be9e8e07b4ebc17
+  nemo_filename: parakeet-ctc-0.6b-vi.nemo
+  checkpoint: checkpoints/asr/parakeet_vi.nemo
+  use_lora: false
+  decoding_strategy: greedy_batch # Không cần KenLM/Flashlight trong profile cơ bản.
+  freeze_encoder: false
+  estimated_parameters: 600000000
+  epochs: 3
+  learning_rate: 0.00001
+  weight_decay: 0.001
+  batch_size: 1
+  gradient_accumulation: 16
+  max_duration: 30.0
+  max_steps: -1
+  gradient_clip: 1.0
+  transcribe_batch_size: 1
+  cache_splits: [train, val, public_test]
+  resume_from_checkpoint: null    # Lightning .ckpt để tiếp tục cả optimizer.
+
+# QLoRA: lượng tử hóa backbone 4-bit và chỉ học adapter LoRA.
+llm:
+  backbone: Qwen/Qwen3-4B-Instruct-2507
+  revision: cdbee75f17c01a7cc42f958dc650907174af0554
+  estimated_parameters: 4000000000
+  checkpoint: checkpoints/llm/final
+  use_lora: true
+  load_in_4bit: true
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  context_length: 12288           # Tokenizer thật: mẫu dài nhất 9681 token, chưa tính sai khác ASR.
+  max_new_tokens: 512
+  attention_implementation: sdpa
+  gradient_checkpointing: true
+  epochs: 2
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  batch_size: 1
+  eval_batch_size: 1
+  gradient_accumulation: 16
+  max_steps: -1
+  logging_steps: 10
+  save_total_limit: 2
+  transcript_source: asr         # Chỉ dùng cache; không tự lấy audio_text khi thiếu cache.
+  resume_from_checkpoint: null
+
+inference:
+  split: public_test             # val sử dụng environment train, chỉ dự đoán ID holdout.
+  time_budget_seconds: 27
+  max_tool_turns: 8
+  submission_path: outputs/submission.jsonl
