@@ -20,7 +20,7 @@ def load_asr_model(
         raise ValueError("Parakeet training uses native NeMo, not Whisper/PEFT LoRA")
     from huggingface_hub import hf_hub_download
     from nemo.collections.asr.models import ASRModel
-    from omegaconf import OmegaConf
+    from omegaconf import OmegaConf, open_dict
 
     if checkpoint is not None:
         path = Path(checkpoint)
@@ -100,13 +100,14 @@ def run(cfg: dict) -> None:
     base = {
         "sample_rate": cfg["data"]["sample_rate"], "batch_size": options["batch_size"],
         "num_workers": cfg["runtime"]["num_workers"], "pin_memory": True,
-        "use_lhotse": False, "is_tarred": False, "trim_silence": False,
+        "use_lhotse": False, "is_tarred": False,
         "max_duration": options["max_duration"],
     }
-    train_ds = OmegaConf.merge(model.cfg.get("train_ds") or {}, base,
-                               {"manifest_filepath": str(train_path), "shuffle": True})
-    val_ds = OmegaConf.merge(model.cfg.get("validation_ds") or {}, base,
-                             {"manifest_filepath": str(val_path), "shuffle": False, "drop_last": False})
+    with open_dict(model.cfg):
+        train_ds = OmegaConf.merge(model.cfg.get("train_ds") or {}, base,
+                                   {"manifest_filepath": str(train_path), "shuffle": True})
+        val_ds = OmegaConf.merge(model.cfg.get("validation_ds") or {}, base,
+                                 {"manifest_filepath": str(val_path), "shuffle": False, "drop_last": False})
     model.setup_training_data(train_ds)
     model.setup_multiple_validation_data(val_ds)
     # Không thay vocabulary: tránh khởi tạo lại decoder/tokenizer đã học tiếng Việt.
