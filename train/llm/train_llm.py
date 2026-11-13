@@ -251,24 +251,50 @@ def run(cfg: dict) -> None:
             dataset[index]
     destination = Path(options["checkpoint"])
     destination.parent.mkdir(parents=True, exist_ok=True)
-    arguments = TrainingArguments(
-        output_dir=str(destination.parent / "trainer"),
-        num_train_epochs=options["epochs"], max_steps=options["max_steps"],
-        per_device_train_batch_size=options["batch_size"], per_device_eval_batch_size=options["eval_batch_size"],
-        gradient_accumulation_steps=options["gradient_accumulation"],
-        learning_rate=options["learning_rate"], weight_decay=options["weight_decay"],
-        warmup_ratio=options["warmup_ratio"], lr_scheduler_type="cosine",
-        bf16=precision == "bf16", fp16=precision == "fp16",
-        gradient_checkpointing=options["gradient_checkpointing"],
-        gradient_checkpointing_kwargs={"use_reentrant": False},
-        eval_strategy="epoch", save_strategy="epoch", load_best_model_at_end=True,
-        metric_for_best_model="eval_loss", greater_is_better=False,
-        save_total_limit=options["save_total_limit"], logging_steps=options["logging_steps"],
-        prediction_loss_only=True, report_to=["tensorboard"],
-        dataloader_num_workers=0, remove_unused_columns=False,
-        optim="adamw_torch", seed=cfg["project"]["seed"], data_seed=cfg["project"]["seed"],
-        label_names=["labels"],
-    )
+    training_args_kwargs = {
+        "output_dir": str(destination.parent / "trainer"),
+        "num_train_epochs": options["epochs"],
+        "max_steps": options["max_steps"],
+        "per_device_train_batch_size": options["batch_size"],
+        "per_device_eval_batch_size": options["eval_batch_size"],
+        "gradient_accumulation_steps": options["gradient_accumulation"],
+        "learning_rate": options["learning_rate"],
+        "weight_decay": options["weight_decay"],
+        "lr_scheduler_type": "cosine",
+        "bf16": precision == "bf16",
+        "fp16": precision == "fp16",
+        "gradient_checkpointing": options["gradient_checkpointing"],
+        "gradient_checkpointing_kwargs": {"use_reentrant": False},
+        "save_strategy": "epoch",
+        "save_total_limit": options["save_total_limit"],
+        "logging_steps": options["logging_steps"],
+        "prediction_loss_only": True,
+        "report_to": ["tensorboard"],
+        "dataloader_num_workers": 0,
+        "remove_unused_columns": False,
+        "optim": "adamw_torch",
+        "seed": cfg["project"]["seed"],
+        "data_seed": cfg["project"]["seed"],
+        "label_names": ["labels"],
+    }
+    import inspect
+    sig = inspect.signature(TrainingArguments.__init__).parameters
+    if "warmup_ratio" in sig:
+        training_args_kwargs["warmup_ratio"] = options["warmup_ratio"]
+    elif "warmup_steps" in sig:
+        training_args_kwargs["warmup_steps"] = 10
+    if "eval_strategy" in sig:
+        training_args_kwargs["eval_strategy"] = "epoch"
+        training_args_kwargs["metric_for_best_model"] = "eval_loss"
+        training_args_kwargs["greater_is_better"] = False
+        training_args_kwargs["load_best_model_at_end"] = True
+    elif "evaluation_strategy" in sig:
+        training_args_kwargs["evaluation_strategy"] = "epoch"
+        training_args_kwargs["metric_for_best_model"] = "eval_loss"
+        training_args_kwargs["greater_is_better"] = False
+        training_args_kwargs["load_best_model_at_end"] = True
+
+    arguments = TrainingArguments(**training_args_kwargs)
     trainer = Trainer(
         model=model, args=arguments, train_dataset=training, eval_dataset=validation,
         processing_class=tokenizer, data_collator=partial(collate_examples, pad_token_id=tokenizer.pad_token_id),
