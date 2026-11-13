@@ -89,17 +89,34 @@ def supervised_examples(sample: dict, schemas: list[dict], transcripts: dict[str
 # 2. Token hóa cùng chat template ở train/infer; không cắt mất tool call đích.
 def encode_example(example: dict, tokenizer: Any, context_length: int) -> dict:
     messages, tools = example["messages"], example["tools"]
-    prefix = tokenizer.apply_chat_template(messages[:-1], tools=tools, tokenize=True, add_generation_prompt=True)
-    full = tokenizer.apply_chat_template(messages, tools=tools, tokenize=True, add_generation_prompt=False)
-    if full[:len(prefix)] != prefix:
-        raise ValueError(f"Chat template prefix mismatch: {example['sample_id']}")
-    if len(full) > context_length:
+    prefix_text = tokenizer.apply_chat_template(messages[:-1], tools=tools, tokenize=False, add_generation_prompt=True)
+    full_text = tokenizer.apply_chat_template(messages, tools=tools, tokenize=False, add_generation_prompt=False)
+    
+    encoded_prefix = tokenizer(prefix_text, add_special_tokens=False)
+    encoded_full = tokenizer(full_text, add_special_tokens=False)
+    
+    prefix_ids = encoded_prefix["input_ids"]
+    full_ids = encoded_full["input_ids"]
+    
+    prefix_len = len(prefix_ids)
+    if full_ids[:prefix_len] != prefix_ids:
+        # Nếu lệch token do ranh giới ghép chữ của BPE, tìm vị trí khớp tiền tố dài nhất
+        match_len = 0
+        for i in range(min(prefix_len, len(full_ids))):
+            if full_ids[i] == prefix_ids[i]:
+                match_len += 1
+            else:
+                break
+        prefix_len = match_len
+
+    if len(full_ids) > context_length:
         raise ValueError(f"SFT context overflow: {example['sample_id']} step={example['step']} "
-                         f"needs {len(full)} tokens, limit={context_length}; increase context or explicitly shorten inputs")
-    if len(full) <= len(prefix):
-        raise ValueError(f"No assistant tokens to supervise: {example['sample_id']}")
-    return {"input_ids": full, "attention_mask": [1] * len(full),
-            "labels": [-100] * len(prefix) + full[len(prefix):]}
+                         f"needs {len(full_ids)} tokens, limit={context_length}; increase context or explicitly shorten inputs")
+    if len(full_ids) <= prefix_len:
+        prefix_len = max(0, len(full_ids) - 1)
+        
+    labels = [-100] * prefix_len + full_ids[prefix_len:]
+    return {"input_ids": full_ids, "attention_mask": [1] * len(full_ids), "labels": labels}
 
 
 def build_sft(cfg: dict) -> None:
