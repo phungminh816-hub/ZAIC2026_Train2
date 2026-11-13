@@ -116,8 +116,17 @@ def run(cfg: dict) -> None:
         "weight_decay": options["weight_decay"],
     }))
     trainer.fit(model, ckpt_path=options["resume_from_checkpoint"])
-    if checkpoint.best_model_path:
-        model = type(model).load_from_checkpoint(checkpoint.best_model_path, map_location="cpu")
+    # Khi dùng NeMo modelPT, lưu thẳng model hiện tại hoặc nạp state_dict từ checkpoint tốt nhất
+    if checkpoint.best_model_path and Path(checkpoint.best_model_path).is_file():
+        import torch
+        ckpt = torch.load(checkpoint.best_model_path, map_location="cpu", weights_only=False)
+        state_dict = ckpt.get("state_dict", ckpt)
+        # Bỏ tiền tố nếu có
+        cleaned_state = {k.replace("model.", ""): v for k, v in state_dict.items()}
+        try:
+            model.load_state_dict(cleaned_state, strict=False)
+        except Exception:
+            model.load_state_dict(state_dict, strict=False)
     model.save_to(str(destination))
     (destination.parent / "training_config.json").write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[ASR] Saved {destination} ({count:,} parameters)")
